@@ -1,0 +1,69 @@
+name: Deploy temporary Cloudflare retry
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-temporary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy and encrypt private result
+        shell: bash
+        run: |
+          set +e
+          npx --yes wrangler@4.112.0 deploy --temporary > "$RUNNER_TEMP/deploy.log" 2>&1
+          deploy_status=$?
+          printf '%s\n' "$deploy_status" > "$RUNNER_TEMP/status.txt"
+
+          cat > "$RUNNER_TEMP/public.pem" <<'PUBLIC_KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAoWI68iPewCpkKiqljUFy
+          o2WMnmak3VZ1qLF3QwYWjpApFAr7FAnvu6TsIiZPK67MH2t+uQCWpDuq2SS3eof/
+          0hnPqw7bhnryhq1fLl/2RyZJdQTavouLjT1KuRX+jJbNtot/qUNRdQ6xovqkgO8H
+          2PDTBBHtd9TV15UguP6AwVtxRuiI8MJQXgS2h6bWgVLlMa/4r+uqTj7WAcE7lX9f
+          ENgqpzTzYk9vg++BH3HWWdVReb814LTSpvPQ50hwJu1nPk8xb4jIEp82YxUiDSQT
+          5OltswQYjvao4cXa1qSTja8F/15vNrselSy40n8+1VdiwIRfOyjmN4ztNcu/FAGP
+          Gppdq4uPd0HuSUMTx7nW34wyMwUoxALPX43l97Ht45L6e4qCXA++AvHiXfiOIpa0
+          4+qP/5nD0IRqFqgPQZfZlZJKhgeoWAjXoKXcKR4glhS6k30nSLyrGxhuyaEfzVtI
+          rc0WMr2yRbMIB+rQt6H1K2jmS9nZ/Iu0BLR0X/tFFt63AgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBLIC_KEY
+
+          openssl rand -hex 32 > "$RUNNER_TEMP/key.hex"
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -in "$RUNNER_TEMP/deploy.log" \
+            -out "$RUNNER_TEMP/deploy.log.enc" \
+            -pass file:"$RUNNER_TEMP/key.hex"
+          openssl pkeyutl -encrypt -pubin \
+            -inkey "$RUNNER_TEMP/public.pem" \
+            -in "$RUNNER_TEMP/key.hex" \
+            -out "$RUNNER_TEMP/key.enc" \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256
+          rm -f "$RUNNER_TEMP/deploy.log" "$RUNNER_TEMP/key.hex" "$RUNNER_TEMP/public.pem"
+          exit 0
+
+      - name: Upload encrypted deployment result
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudflare-temporary-retry
+          path: |
+            ${{ runner.temp }}/deploy.log.enc
+            ${{ runner.temp }}/key.enc
+            ${{ runner.temp }}/status.txt
+          retention-days: 1
+          if-no-files-found: error
