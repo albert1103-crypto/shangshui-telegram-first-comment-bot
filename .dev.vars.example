@@ -1,0 +1,3 @@
+# Cloudflare Deploy will ask for this secret.
+# Never commit a real token to GitHub.
+BOT_TOKEN=PASTE_NEW_TOKEN_FROM_BOTFATHER
