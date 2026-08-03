@@ -222,107 +222,60 @@ export default {
       const provided = request.headers.get("X-Telegram-Bot-Api-Secret-Token");
       if (provided !== secret) return json({ ok: false }, 403);
 
-      const stateId = env.BOT_STATE.idFromName("shangshui-global-state");
-      const state = env.BOT_STATE.get(stateId);
-      return state.fetch("https://state.internal/process", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: await request.text(),
-      });
+      let update;
+      try {
+        update = await request.json();
+      } catch {
+        return json({ ok: false, error: "Invalid JSON" }, 400);
+      }
+
+      const updateId = update?.update_id;
+      if (!Number.isInteger(updateId)) return json({ ok: true, ignored: "no update_id" });
+
+      const message = update?.message;
+      if (!message || message.is_automatic_forward !== true) {
+        return json({ ok: true, ignored: "not automatic forward" });
+      }
+
+      const source = sourceChannelUsername(message);
+      if (source !== SOURCE_CHANNEL_USERNAME.toLowerCase()) {
+        return json({ ok: true, ignored: "another source channel" });
+      }
+
+      const chatId = message?.chat?.id;
+      const messageId = message?.message_id;
+      if (!Number.isInteger(chatId) || !Number.isInteger(messageId)) {
+        return json({ ok: false, error: "Missing chat/message ID" }, 400);
+      }
+
+      const cache = caches.default;
+      const mediaGroupId = message?.media_group_id;
+      const dedupeId = mediaGroupId
+        ? `media:${chatId}:${mediaGroupId}`
+        : `update:${updateId}`;
+      const dedupeUrl = `https://dedupe.internal/${encodeURIComponent(dedupeId)}`;
+      const dedupeRequest = new Request(dedupeUrl, { method: "GET" });
+      const seen = await cache.match(dedupeRequest);
+      if (seen) return json({ ok: true, duplicate: true });
+
+      try {
+        const sent = await sendFirstComment(env.BOT_TOKEN, chatId, messageId);
+        await cache.put(
+          dedupeRequest,
+          new Response("1", {
+            headers: { "Cache-Control": "public, max-age=86400" },
+          }),
+        );
+        return json({
+          ok: true,
+          commented: true,
+          comment_message_id: sent?.message_id ?? null,
+        });
+      } catch (error) {
+        return json({ ok: false, error: String(error?.message ?? error) }, 500);
+      }
     }
 
     return json({ ok: false, error: "Not found" }, 404);
   },
 };
-
-export class BotState {
-  constructor(state, env) {
-    this.state = state;
-    this.env = env;
-  }
-
-  async fetch(request) {
-    if (request.method !== "POST") return json({ ok: false }, 405);
-
-    let update;
-    try {
-      update = await request.json();
-    } catch {
-      return json({ ok: false, error: "Invalid JSON" }, 400);
-    }
-
-    const updateId = update?.update_id;
-    if (!Number.isInteger(updateId)) return json({ ok: true, ignored: "no update_id" });
-
-    const updateKey = `update:${updateId}`;
-    const existing = await this.state.storage.get(updateKey);
-    if (existing) return json({ ok: true, duplicate: true });
-
-    await this.state.storage.put(updateKey, Date.now());
-
-    const message = update?.message;
-    if (!message || message.is_automatic_forward !== true) {
-      await this.scheduleCleanup();
-      return json({ ok: true, ignored: "not automatic forward" });
-    }
-
-    const source = sourceChannelUsername(message);
-    if (source !== SOURCE_CHANNEL_USERNAME.toLowerCase()) {
-      await this.scheduleCleanup();
-      return json({ ok: true, ignored: "another source channel" });
-    }
-
-    const chatId = message?.chat?.id;
-    const messageId = message?.message_id;
-    if (!Number.isInteger(chatId) || !Number.isInteger(messageId)) {
-      await this.state.storage.delete(updateKey);
-      return json({ ok: false, error: "Missing chat/message ID" }, 400);
-    }
-
-    const mediaGroupId = message?.media_group_id;
-    const mediaKey = mediaGroupId ? `media:${chatId}:${mediaGroupId}` : null;
-
-    if (mediaKey && (await this.state.storage.get(mediaKey))) {
-      await this.scheduleCleanup();
-      return json({ ok: true, duplicate_album_item: true });
-    }
-
-    if (mediaKey) await this.state.storage.put(mediaKey, Date.now());
-
-    try {
-      const sent = await sendFirstComment(this.env.BOT_TOKEN, chatId, messageId);
-      await this.scheduleCleanup();
-      return json({
-        ok: true,
-        commented: true,
-        comment_message_id: sent?.message_id ?? null,
-      });
-    } catch (error) {
-      await this.state.storage.delete(updateKey);
-      if (mediaKey) await this.state.storage.delete(mediaKey);
-      return json({ ok: false, error: String(error?.message ?? error) }, 500);
-    }
-  }
-
-  async scheduleCleanup() {
-    const currentAlarm = await this.state.storage.getAlarm();
-    if (currentAlarm === null) {
-      await this.state.storage.setAlarm(Date.now() + 60 * 60 * 1000);
-    }
-  }
-
-  async alarm() {
-    const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-    const entries = await this.state.storage.list();
-    const expired = [];
-
-    for (const [key, timestamp] of entries) {
-      if ((key.startsWith("update:") || key.startsWith("media:")) && Number(timestamp) < cutoff) {
-        expired.push(key);
-      }
-    }
-
-    if (expired.length) await this.state.storage.delete(expired);
-    await this.state.storage.setAlarm(Date.now() + 60 * 60 * 1000);
-  }
-}
