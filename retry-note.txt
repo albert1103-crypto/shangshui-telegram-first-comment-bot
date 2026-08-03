@@ -1,0 +1,1 @@
+Trigger a new temporary Cloudflare deployment without resource bindings.
