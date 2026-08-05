@@ -1,0 +1,72 @@
+name: Deploy news advertising bot temporary preview
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "news-ad-bot/**"
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-temporary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Deploy and encrypt private result
+        shell: bash
+        run: |
+          set +e
+          cd news-ad-bot
+          npx --yes wrangler@4.112.0 deploy --temporary --config wrangler.jsonc > "$RUNNER_TEMP/deploy.log" 2>&1
+          deploy_status=$?
+          printf '%s\n' "$deploy_status" > "$RUNNER_TEMP/status.txt"
+
+          cat > "$RUNNER_TEMP/public.pem" <<'PUBLIC_KEY'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAlAmNoWXPhUTUhsdInGN0
+          JF+XxSkj/MRePpLspEXzaMaNDchar3qMBXHWkfvI9Mn/GI5JfXE4pvjBBqQP0orU
+          /gx+YVJj0CWkOYQwq8p+ixGqoCFmtkS4vV683K8PfBzGKOVqPoJazHQj2k+HTeLU
+          cjUVC0GehJq5/3zlmEv9CjcPlCnCGR2YV8DXVyNaEeE4QCrfvTGsQy2NhwmTsL8q
+          OqkFShw4DYFAC8n9MAdwyl6bpiK43GgPUX7tJZ2HyUQFGbgJve/7GGp4pXrZN4c9
+          lwghna8bqcLZKWf3oLqL9qXKK48Kqg+eGTDXO6ZQplWLQUcxKUJPnWCqRFUAc3LD
+          357lReSXTp8IFLZOKi0BUxsJ7I5hDjxSBVlHxmMDp6o8Omrw3Qf5GLN+9kWyjgVJ
+          ND+lK1UF/hCI10oxhuRiIUn9FL7uMfruGbU+nUtonHCE0ybZcx9Mx9fM705Ic8a4
+          LqvdS66YyXGsIA/fbXjtw1Sc1g1NXWzenLvvYG1A7ks1AgMBAAE=
+          -----END PUBLIC KEY-----
+          PUBLIC_KEY
+
+          openssl rand -hex 32 > "$RUNNER_TEMP/key.hex"
+          openssl enc -aes-256-cbc -pbkdf2 -salt \
+            -in "$RUNNER_TEMP/deploy.log" \
+            -out "$RUNNER_TEMP/deploy.log.enc" \
+            -pass file:"$RUNNER_TEMP/key.hex"
+          openssl pkeyutl -encrypt -pubin \
+            -inkey "$RUNNER_TEMP/public.pem" \
+            -in "$RUNNER_TEMP/key.hex" \
+            -out "$RUNNER_TEMP/key.enc" \
+            -pkeyopt rsa_padding_mode:oaep \
+            -pkeyopt rsa_oaep_md:sha256
+          rm -f "$RUNNER_TEMP/deploy.log" "$RUNNER_TEMP/key.hex" "$RUNNER_TEMP/public.pem"
+          exit 0
+
+      - name: Upload encrypted deployment result
+        uses: actions/upload-artifact@v4
+        with:
+          name: news-ad-temporary-deployment
+          path: |
+            ${{ runner.temp }}/deploy.log.enc
+            ${{ runner.temp }}/key.enc
+            ${{ runner.temp }}/status.txt
+          retention-days: 1
+          if-no-files-found: error
