@@ -1,0 +1,15 @@
+{
+  "name": "news-ad-first-comment-worker",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Separate Telegram advertising first-comment bot for news channels.",
+  "scripts": {
+    "check": "node --check src/index.js",
+    "dev": "wrangler dev --config wrangler.jsonc",
+    "deploy": "wrangler deploy --config wrangler.jsonc"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
