@@ -1,0 +1,13 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {LANGUAGES,SCAN_INTERVAL_MS,COMMENT_GAP_MS,validateRule,scheduleJobs,isScanDue,pickTemplate,buildGeminiBody,parseGemini,safeComment} from "../src/core.js";
+test("supports five required languages",()=>assert.deepEqual(LANGUAGES,["th","en","zh-CN","zh-TW","vi"]));
+test("scan interval is exactly 45 minutes",()=>assert.equal(SCAN_INTERVAL_MS,2700000));
+test("comment gap is exactly 5 minutes",()=>assert.equal(COMMENT_GAP_MS,300000));
+test("scan due logic",()=>{assert.equal(isScanDue(1000,1000+SCAN_INTERVAL_MS-1),false);assert.equal(isScanDue(1000,1000+SCAN_INTERVAL_MS),true)});
+test("queue spacing preserves five-minute gaps",()=>{const j=scheduleJobs([{id:1},{id:2},{id:3}],1000);assert.deepEqual(j.map(x=>x.dueAt),[1000,301000,601000])});
+test("validation requires template",()=>{assert.throws(()=>validateRule({accountId:"a",channelId:"c",outputLanguage:"vi",mode:"template"}));assert.equal(validateRule({accountId:"a",channelId:"c",outputLanguage:"vi",mode:"ai"}),true)});
+test("rotating templates",()=>assert.equal(pickTemplate("one\n---\ntwo",1),"two"));
+test("Gemini language",()=>assert.match(buildGeminiBody({postText:"x",outputLanguage:"zh-TW",model:"m"}).body.systemInstruction.parts[0].text,/繁體中文/));
+test("Gemini parser",()=>assert.equal(parseGemini({candidates:[{content:{parts:[{text:" hello "}]}}]}),"hello"));
+test("comment validator",()=>{assert.throws(()=>safeComment(""));assert.throws(()=>safeComment("x".repeat(801)));assert.equal(safeComment("ok"),"ok")});
