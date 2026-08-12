@@ -37,10 +37,40 @@ export async function listChannelDialogs(client) {
   })).filter(d => d.id);
 }
 export async function requestLoginCode(settings, phone) {
-  return withTelegram(settings, "", async client => {
-    const sent = await client.sendCode({ apiId:Number(settings.apiId), apiHash:String(settings.apiHash) }, phone, false);
+  const client = await makeTelegramClient(settings, "");
+  try {
+    await client.connect();
+    let sent;
+    try {
+      sent = await sendLoginCodeOnSender(client, settings, phone);
+    } catch (error) {
+      const match = String(error?.errorMessage || error?.message || error).match(/(?:PHONE|NETWORK|USER)_MIGRATE_(\d+)/i);
+      if (!match) throw error;
+
+      // teleproto's high-level invoke retries migration errors from inside the
+      // sender's response loop. Disconnecting that sender from within its own
+      // error handler can leave the request hanging on Workers. Handle the
+      // migration outside invoke so the new DC has a clean request lifecycle.
+      await client._switchDC(Number(match[1]));
+      sent = await sendLoginCodeOnSender(client, settings, phone);
+    }
     return { phoneCodeHash: sent.phoneCodeHash, viaApp: Boolean(sent.isCodeViaApp), session: client.session.save() };
+  } finally {
+    try { await client.disconnect(); } catch {}
+  }
+}
+
+async function sendLoginCodeOnSender(client, settings, phone) {
+  const request = new Api.auth.SendCode({
+    phoneNumber: phone,
+    apiId: Number(settings.apiId),
+    apiHash: String(settings.apiHash),
+    settings: new Api.CodeSettings({}),
   });
+  const sent = await client._sender.send(request);
+  if (sent instanceof Api.auth.SentCodeSuccess) throw new Error("logged in right after sending the code");
+  if (!(sent instanceof Api.auth.SentCode)) throw new Error("Telegram returned an unexpected login response");
+  return sent;
 }
 export async function finishLogin(settings, pending, code, password) {
   const client = await makeTelegramClient(settings, pending.session);
