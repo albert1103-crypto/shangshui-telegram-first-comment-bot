@@ -1,22 +1,19 @@
 {
-  "name": "shangshui-telegram-first-comment-worker",
-  "version": "1.0.0",
+  "name": "shangshui-telegram-automation-studio",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "Minimal Telegram first-comment bot for SHANG SHUI, deployed on Cloudflare Workers.",
+  "description": "Cloudflare-hosted Telegram MTProto automation dashboard with Gemini and multilingual templates.",
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
-    "check": "node --check src/index.js"
+    "check": "node --check src/index.js && node --check src/core.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "teleproto": "^1.228.4"
   },
   "devDependencies": {
     "wrangler": "^4.0.0"
-  },
-  "cloudflare": {
-    "bindings": {
-      "BOT_TOKEN": {
-        "description": "Paste the NEW Telegram bot token from @BotFather. Revoke any token previously shared in chat. This value must be stored as a secret and must never be committed to GitHub."
-      }
-    }
   }
 }
