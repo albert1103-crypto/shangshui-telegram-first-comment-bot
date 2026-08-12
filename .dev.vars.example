@@ -1,3 +1,6 @@
-# Cloudflare Deploy will ask for this secret.
-# Never commit a real token to GitHub.
-BOT_TOKEN=PASTE_NEW_TOKEN_FROM_BOTFATHER
+# Optional default Gemini key for local/Cloudflare development.
+# Prefer a Cloudflare secret or dashboard setting; never commit a real key.
+GEMINI_API_KEY=PASTE_GEMINI_KEY_HERE
+
+# Optional model override. The dashboard defaults to this value when omitted.
+GEMINI_MODEL=gemini-3.5-flash-lite

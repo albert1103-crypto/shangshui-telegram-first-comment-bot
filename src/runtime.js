@@ -1,6 +1,24 @@
 import { TelegramClient, Api } from "teleproto";
-import { StringSession } from "teleproto/sessions";
+import { StringSession } from "teleproto/sessions/index.js";
 import { buildGeminiBody, parseGemini, safeComment } from "./core.js";
+
+export function classifyTelegramError(error) {
+  const raw = String(error?.errorMessage || error?.message || error || "Telegram request failed").trim();
+  const upper = raw.toUpperCase();
+  const flood = upper.match(/FLOOD_WAIT[_\s:]*(\d+)/) || upper.match(/A_WAIT_(\d+)/);
+  if (flood || error?.seconds) {
+    const seconds = Math.min(Math.max(Number(error?.seconds || flood?.[1] || 60), 1), 24 * 60 * 60);
+    return {
+      kind: "flood_wait",
+      retryAfterMs: seconds * 1000,
+      message: `Telegram rate limit (FLOOD_WAIT_${seconds}); retry scheduled automatically`,
+    };
+  }
+  if (/AUTH_KEY_UNREGISTERED|AUTH_KEY_INVALID|SESSION_REVOKED|SESSION_EXPIRED|USER_DEACTIVATED|AUTH_KEY_PERM_EMPTY/.test(upper)) {
+    return { kind: "session_expired", message: "Telegram session expired or was revoked; reconnect this account" };
+  }
+  return { kind: "telegram_error", message: raw.slice(0, 500) || "Telegram request failed" };
+}
 
 export async function makeTelegramClient(settings, session = "") {
   if (!Number(settings.apiId) || !settings.apiHash) throw new Error("Set Telegram API ID and API Hash in Settings first");

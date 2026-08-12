@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {LANGUAGES,SCAN_INTERVAL_MS,COMMENT_GAP_MS,validateRule,scheduleJobs,isScanDue,pickTemplate,buildGeminiBody,parseGemini,safeComment} from "../src/core.js";
+import {LANGUAGES,SCAN_INTERVAL_MS,COMMENT_GAP_MS,PENDING_LOGIN_TTL_MS,validateRule,scheduleJobs,isScanDue,pickTemplate,buildGeminiBody,parseGemini,safeComment} from "../src/core.js";
+import { classifyTelegramError } from "../src/runtime.js";
 test("supports five required languages",()=>assert.deepEqual(LANGUAGES,["th","en","zh-CN","zh-TW","vi"]));
 test("scan interval is exactly 45 minutes",()=>assert.equal(SCAN_INTERVAL_MS,2700000));
 test("comment gap is exactly 5 minutes",()=>assert.equal(COMMENT_GAP_MS,300000));
@@ -11,3 +12,6 @@ test("rotating templates",()=>assert.equal(pickTemplate("one\n---\ntwo",1),"two"
 test("Gemini language",()=>assert.match(buildGeminiBody({postText:"x",outputLanguage:"zh-TW",model:"m"}).body.systemInstruction.parts[0].text,/繁體中文/));
 test("Gemini parser",()=>assert.equal(parseGemini({candidates:[{content:{parts:[{text:" hello "}]}}]}),"hello"));
 test("comment validator",()=>{assert.throws(()=>safeComment(""));assert.throws(()=>safeComment("x".repeat(801)));assert.equal(safeComment("ok"),"ok")});
+test("pending login requests expire after ten minutes",()=>assert.equal(PENDING_LOGIN_TTL_MS,600000));
+test("FLOOD_WAIT is scheduled for retry",()=>{const x=classifyTelegramError({errorMessage:"FLOOD_WAIT_42"});assert.equal(x.kind,"flood_wait");assert.equal(x.retryAfterMs,42000);assert.match(x.message,/retry scheduled/)});
+test("revoked Telegram sessions are paused",()=>{const x=classifyTelegramError({errorMessage:"AUTH_KEY_UNREGISTERED"});assert.equal(x.kind,"session_expired");assert.match(x.message,/reconnect/)});

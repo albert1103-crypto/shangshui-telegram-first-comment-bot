@@ -3,6 +3,7 @@ export const LANGUAGE_LABELS = { th:"ไทย", en:"English", "zh-CN":"简体�
 export const SCAN_INTERVAL_MS = 45 * 60 * 1000;
 export const COMMENT_GAP_MS = 5 * 60 * 1000;
 export const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+export const PENDING_LOGIN_TTL_MS = 10 * 60 * 1000;
 export function validateRule(rule){if(!rule||typeof rule!=="object")throw new Error("Rule is required");if(!rule.accountId)throw new Error("accountId is required");if(!rule.channelId)throw new Error("channelId is required");if(!LANGUAGES.includes(rule.outputLanguage))throw new Error("Unsupported output language");if(!["ai","template"].includes(rule.mode))throw new Error("Unsupported comment mode");if(rule.mode==="template"&&!String(rule.templateText||"").trim())throw new Error("Template text is required");return true;}
 export function normalizePostText(message){return String(message?.message??message?.text??"").trim();}
 export function scheduleJobs(posts,startAt,existingJobs=[],gapMs=COMMENT_GAP_MS){const activeDue=existingJobs.filter(j=>["queued","processing"].includes(j.status)).map(j=>Number(j.dueAt||0));const next=Math.max(Number(startAt),activeDue.length?Math.max(...activeDue)+gapMs:Number(startAt));return posts.map((post,index)=>({...post,dueAt:next+index*gapMs}));}

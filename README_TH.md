@@ -1,101 +1,48 @@
-# SHANG SHUI Telegram First Comment Bot
+# Telegram Automation Studio
 
-บอทแบบเรียบง่ายสำหรับ Channel `@vieclamsrilankashangshui`
+เว็บแดชบอร์ดบน Cloudflare Workers สำหรับให้บัญชีผู้ใช้ Telegram ทำคอมเมนต์ในโพสต์ของ Channel ที่เลือก โดยใช้ MTProto ไม่ใช่ Bot API
 
-เมื่อโพสต์ใหม่ถูกส่งอัตโนมัติไปยัง Discussion Group บอทจะตอบเป็นคอมเมนต์แรก พร้อมข้อความแบรนด์และปุ่ม:
+## ความสามารถ
 
-- 💼 Vị trí đang tuyển → https://t.me/vieclamsrilankashangshui/356
-- 📩 Liên hệ ứng tuyển → https://t.me/shangshuiDD
+- เพิ่มบัญชี Telegram ได้หลายบัญชี
+- ล็อกอินด้วย OTP และรองรับ 2FA
+- ดึงรายการ Channel ที่บัญชีเข้าถึงได้
+- เปิดใช้กฎแยกตาม Channel และเลือกภาษาได้ 5 ภาษา: ไทย, English, 简体中文, 繁體中文, Tiếng Việt
+- โหมด AI Comment ผ่าน Gemini หรือ Template Comment แบบหมุนเวียน
+- ตรวจโพสต์ใหม่ทุก 45 นาที
+- ถ้ามีหลายโพสต์ ระบบจัดคิวห่างกัน 5 นาทีต่อบัญชี
+- ใช้ Durable Object Alarm และเก็บสถานะถาวร ไม่พึ่ง Cron Trigger
+- มี Dashboard password, Queue, Logs, Manual Scan และสถานะบัญชี
+- ถ้า Telegram ตอบ `FLOOD_WAIT` ระบบจะเลื่อนคิวอัตโนมัติ และถ้า session ถูกยกเลิกจะ pause บัญชีเพื่อความปลอดภัย
 
-## จุดเด่น
+## การตรวจสอบบนเครื่อง
 
-- ทำงานบน Cloudflare Workers ไม่ต้องเปิดคอม
-- Deep Freeze ไม่มีผล
-- รับเฉพาะ automatic forward จาก Channel ที่กำหนด
-- รองรับข้อความ รูป วิดีโอ ไฟล์ และอัลบั้ม
-- อัลบั้มหลายภาพคอมเมนต์ครั้งเดียว
-- ป้องกัน Telegram webhook update ซ้ำด้วย Durable Object
-- ใช้ปุ่ม `primary` และ `success`
-- หาก Telegram ปฏิเสธ style จะลองส่งปุ่มรูปแบบปกติให้อัตโนมัติ
-- Webhook secret สร้างจาก Token อัตโนมัติ ไม่ต้องกรอกเพิ่ม
-
-## การตั้งค่าที่ผู้ใช้ต้องทำเพียงครั้งเดียว
-
-### 1. เปลี่ยน Bot Token
-
-Token ที่เคยส่งในแชตต้องยกเลิก:
-
-1. เปิด `@BotFather`
-2. ส่ง `/revoke`
-3. เลือก `@SHANGSHUIDD_BOT`
-4. รับ Token ใหม่
-5. ห้ามใส่ Token ลง GitHub
-
-### 2. Deploy Repository เข้า Cloudflare Workers
-
-ใน Cloudflare Dashboard:
-
-1. ไปที่ Workers & Pages
-2. เลือก Create / Import a repository
-3. เลือก Repository นี้
-4. Deploy
-
-Cloudflare จะอ่าน `wrangler.jsonc` และสร้าง Durable Object binding ให้
-
-### 3. ใส่ Secret เพียงค่าเดียว
-
-เปิด Worker → Settings → Variables and Secrets
-
-เพิ่ม Secret:
-
-```text
-BOT_TOKEN=Token ใหม่จาก BotFather
+```bash
+npm install
+npm test
+npx wrangler deploy --dry-run
 ```
 
-จากนั้น Redeploy
+## การ Deploy ถาวร
 
-### 4. เปิด URL ของ Worker หนึ่งครั้ง
+Workflow ที่ `.github/workflows/automation-studio-ci.yml` จะติดตั้ง dependency, รันทดสอบ, ตรวจ bundle, Deploy และตรวจ `/health`
 
-เปิด URL หลัก เช่น:
-
-```text
-https://shangshui-telegram-first-comment.<account>.workers.dev/
-```
-
-หน้าเว็บจะ:
-
-- ตรวจ Token ด้วย `getMe`
-- สร้าง Webhook secret อัตโนมัติ
-- เรียก `setWebhook`
-- แสดงสถานะว่าพร้อมทำงาน
-
-### 5. ตั้ง Telegram
-
-1. เชื่อม Channel กับ Discussion Group
-2. เพิ่ม `@SHANGSHUIDD_BOT` เข้า Discussion Group
-3. ตั้ง Bot เป็น Admin และอนุญาตให้ส่งข้อความ
-4. โพสต์ใหม่ใน Channel เพื่อทดสอบ
-
-## Health Check
+ให้เพิ่ม GitHub Actions Secrets ใน repository:
 
 ```text
-https://YOUR-WORKER.workers.dev/health
+CLOUDFLARE_API_TOKEN
+CLOUDFLARE_ACCOUNT_ID
 ```
 
-## ความปลอดภัย
+API Token ควรจำกัดเฉพาะ Cloudflare account เป้าหมายและมีสิทธิ์แก้ไข Workers เท่านั้น หากไม่มีค่าใดค่าหนึ่ง workflow จะใช้ temporary deployment เพื่อทดสอบ ซึ่งไม่ใช่ production ถาวร
 
-- GitHub ไม่มี Bot Token
-- Token อยู่ใน Cloudflare Secret เท่านั้น
-- Webhook path และ header secret สร้างจาก Token แบบ SHA-256
-- Logs ไม่แสดง Token
+## ตั้งค่าครั้งแรก
 
-## แก้ข้อความหรือปุ่ม
+1. เปิด URL ของ Worker แล้วสร้างรหัสผ่าน Dashboard
+2. ไปที่ Settings ใส่ Telegram API ID และ API Hash จาก `my.telegram.org`
+3. ใส่ Gemini API key ใน Settings หรือเก็บเป็น Cloudflare secret ชื่อ `GEMINI_API_KEY`
+4. เพิ่มหมายเลขโทรศัพท์ Telegram และกรอก OTP/2FA ในหน้าเว็บ
+5. โหลด Channels เลือก Channel, ภาษา และโหมด AI/Template แล้วกด Save automations
+6. ตรวจ `/health` และแท็บ Queue & Logs ก่อนเปิดใช้งานต่อเนื่อง
 
-แก้ค่าด้านบนของ `src/index.js`:
-
-- `SOURCE_CHANNEL_USERNAME`
-- `JOB_URL`
-- `APPLY_URL`
-- `COMMENT_TEXT`
-
-Commit แล้ว Cloudflare จะ Deploy เวอร์ชันใหม่
+ห้ามใส่ Telegram session, API credential, Gemini key, OTP หรือรหัสผ่านลง Git/GitHub โค้ด ระบบจะเก็บ session และการตั้งค่าไว้ใน Durable Object ของ Worker
