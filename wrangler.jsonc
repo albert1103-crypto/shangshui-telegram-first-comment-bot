@@ -7,7 +7,6 @@
   "workers_dev": true,
   "observability": { "enabled": true },
   "vars": { "GEMINI_MODEL": "gemini-3.5-flash-lite" },
-  "triggers": { "crons": ["*/15 * * * *"] },
   "durable_objects": {
     "bindings": [
       { "name": "AUTOMATION_STATE", "class_name": "AutomationState" }
