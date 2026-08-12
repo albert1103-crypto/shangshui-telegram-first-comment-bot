@@ -1,5 +1,6 @@
 import { TelegramClient, Api } from "teleproto";
 import { StringSession } from "teleproto/sessions/index.js";
+import { PromisedWebSockets } from "teleproto/extensions/index.js";
 import { buildGeminiBody, parseGemini, safeComment } from "./core.js";
 
 export function classifyTelegramError(error) {
@@ -22,7 +23,7 @@ export function classifyTelegramError(error) {
 
 export async function makeTelegramClient(settings, session = "") {
   if (!Number(settings.apiId) || !settings.apiHash) throw new Error("Set Telegram API ID and API Hash in Settings first");
-  return new TelegramClient(new StringSession(session), Number(settings.apiId), String(settings.apiHash), { connectionRetries: 3, autoReconnect: false });
+  return new TelegramClient(new StringSession(session), Number(settings.apiId), String(settings.apiHash), { connectionRetries: 3, autoReconnect: false, networkSocket: PromisedWebSockets });
 }
 export async function withTelegram(settings, session, fn) {
   const client = await makeTelegramClient(settings, session);
