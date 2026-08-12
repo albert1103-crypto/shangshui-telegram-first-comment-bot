@@ -27,12 +27,15 @@ jobs:
       - name: Verify Worker bundle
         run: npx wrangler deploy --dry-run
       - name: Deploy Worker
+        id: deploy
         shell: bash
         run: |
           log="$RUNNER_TEMP/deploy.log"
           if [ -n "$CLOUDFLARE_API_TOKEN" ] && [ -n "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "permanent=true" >> "$GITHUB_OUTPUT"
             npx wrangler deploy >"$log" 2>&1
           else
+            echo "permanent=false" >> "$GITHUB_OUTPUT"
             unset CLOUDFLARE_API_TOKEN CLOUDFLARE_ACCOUNT_ID
             npx wrangler deploy --temporary >"$log" 2>&1
           fi
@@ -44,7 +47,14 @@ jobs:
           echo "WORKER_URL=$url" >> "$GITHUB_ENV"
           echo "Worker URL: $url"
       - name: Verify live health endpoint
+        if: steps.deploy.outputs.permanent == 'true'
         shell: bash
         run: |
           curl --fail --silent --show-error --retry 5 --retry-delay 2 "$WORKER_URL/health" | tee "$RUNNER_TEMP/health.json"
           grep -q '"ok":true' "$RUNNER_TEMP/health.json"
+      - name: Report temporary deployment limitation
+        if: steps.deploy.outputs.permanent != 'true'
+        run: |
+          echo "Temporary preview deployed at $WORKER_URL."
+          echo "Cloudflare may challenge anonymous scripted requests to temporary previews, so live health verification is reserved for permanent deployments."
+          echo "Add CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets to enable production deployment and health verification."
